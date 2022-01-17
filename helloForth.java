@@ -1,7 +1,7 @@
 /*
 
 */
-
+import java.lang.*;
 import java.util.*;
 import forth.*;
 
@@ -16,7 +16,6 @@ public volatile int BLK_ = 0 ; // перенести в память
 public  int _IN=0;       // !!!!to memory 
 public String TIB; //  строковая переменная - иммитирует tib
 public String StrBuffer;  //  сюда возвращает значение word и забирает find
- 
 
 */
 
@@ -24,6 +23,9 @@ public String StrBuffer;  //  сюда возвращает значение wor
 
     public static void main(String[] args) {
 
+      String filename=null;
+      if ( args != null ||   args[0] != "" )  filename=args[0];// System.out.println("nj= Это="+filename);
+      
       fas  as = new fas();
 
 
@@ -32,20 +34,40 @@ public String StrBuffer;  //  сюда возвращает значение wor
       ST.stack=stackarray;//new int[100]; //stackarray;
       as.ST=ST;
 
-//init
-      as.here=  2;
-      as.  latest=3;
-      as.state   =4;      
-      as.  memory[as.here]=6; //взято от балды
-      as.  memory[as.latest]=0; // записи в словари еще не создавались
-      as.  memory[as.state] =0; // 0 на данный момент исполнение     
+     String firstfile=as.loadTextFile(filename); //загрузка файла, если есть 
 
-     Vector V=null;
+//init
+  as.mem = as.createMemory(null,100000);
+  if (as.mem==null) System.out.println("memo  huynia polnaya"); else System.out.println("memoyes");
+   
+      as.here    = 2; //  адреса в памяти, где хранятся эти  переменные
+      as.latest  =6;
+      as.state   =10;      
+      as.context =  15;
+      as.current =  20;
+      as.forthVoc=  25; 
+
+      as.mem.putInt(as. here,45);//  as.  memory[as.here]=6; //взято от балды
+      as.mem.putInt(as. latest,0);//      as.  memory[as.latest]=0; // записи в словари еще не создавались
+      as.mem.putInt(as. state,0);//     as.  memory[as.state] =0; // 0 на данный момент исполнение     
+
+
+     Vector V=null;               // хранилище строк
      V = as.initVirtualMem(0);
      as.StringVector=V;
 
+    int currentHere = as.newDict("FORTH",0,(byte)0);
 
+
+    as.mem.putInt(as. context, currentHere);// as.latest);   // для работы create -- начальное должно указывать на  0
+    as.mem.putInt(as. current, currentHere);//as.latest);  // см   void cre0(String s)
+    as.mem.putInt(as.forthVoc, currentHere);    
+   
 //init 
+
+  as.initFVMwords();
+
+
 
       fas.STACK RST =  as. new STACK();
       int[] ret_stackarray=new int[30];
@@ -55,7 +77,7 @@ public String StrBuffer;  //  сюда возвращает значение wor
       fas.FVM VM = as. new FVM();
       VM.stack=as.ST;
       VM.adrStack=RST;
-      VM.image=as.memory;
+//      VM.image=as.memory;
       int[] ports = new int[20]; 
       VM.ports=ports; 
       as.VM=VM;   
@@ -63,42 +85,40 @@ public String StrBuffer;  //  сюда возвращает значение wor
 ///
 
 //init
-  as.initFVMwords();
 
-
-
-
-/// as.TIB=null; as.TIB="EXIT  . : ; create allot does> , here compile  immediate >resolve <resolve load ( (loop) compile2 ";
-///  as._IN=0; // тут дальнейшие определения
  
  as.cre1();  // создается  определение для exit
  
- as.exit_addr=as.memory[as.here];//сохранить точску входа в exit,чтобы положить на стек возвратов  
- 
- as.ST.push(1); as.comma16();  // lit  
- as.ST.push(0); as.comma16();  // 0
- as.ST.push(1); as.comma16();  // lit  
- as.ST.push(0); as.comma16();  // 0 
- as.ST.push(29); as.comma16(); // out      -- вывод в порт 0, номер фции 0 "exit"
+ as.exit_addr=as.mem.getInt(as.here);// as.memory[as.here];//сохранить точску входа в exit,чтобы положить на стек возвратов  
+ as.setout_(0,0,false); 
 
   as.ST.push(2);  as.setCFA();
 
 
 // определяется "." 
- as.cre1();
-  as.ST.push(1); as.comma16();  // lit  
- as.ST.push(1); as.comma16();  // 1     
- as.ST.push(1); as.comma16();  // lit  
- as.ST.push(0); as.comma16();  // 0  // номер порта
- as.ST.push(29); as.comma16(); // out      -- вывод в порт 0, номер фции 1 "." 
-  as.ST.push(9); as.comma16();  //9  ";"
+ as.cre1(); 
 
+ as.setout_(1,0,true);
   as.ST.push(2);  as.setCFA();
 
 //init 
- as.initEXTwords();
+//  as.initEXTwords();
+
+      as.VM.Ob=as;
+ as.initEXTwords_2(as);
+
+
+ System.out.println("as.interpret");//initFVMword then");
  as.interpret();
-   
+
+  double[] FL = new double[30]; 
+  as.ST.fstack=FL;
+
+ if (firstfile != null ){  
+ 	     as._IN = 0;
+	     as.TIB=firstfile;
+            as.interpret();
+            }
       Scanner in = new Scanner(System.in);
  
       boolean b = true;
@@ -120,38 +140,7 @@ public String StrBuffer;  //  сюда возвращает значение wor
  	     as._IN = 0;
 	     as.TIB=s;
   as.interpret();
-/*	     
-             while (bb) {  // цикл разделения строк на слова
-	           as.ST.push(0);
-		   as.WORD();
-		   String ss = as.StrBuffer;
-              //     String ss =as.word_(s);
-                 //  as.ST.pop();
-                   
-		   if (! ss.equals("") ) {
-	         	    //  as.ST.push(0);
-
-                              as.FIND(); 
-		             int i =  as.ST.pop();// снять со стека признак немедленного исполнения
-		             if (i != 0) {
-		                    System.out.println(ss+" - найдено");
-				    if (as.memory[as.state]==0 || i==1 ) 
-				      as.exec();
-				      else as.comp();
-			            }
-	 		           else { 
-					as.number();			
-			                if (as.error != -1)  {System.out.println(ss+" add to stack");  as.literal() ; } 
-	         		            else { as.error = 0; 
-		           	              //   as.cre0(ss);
-                                                 System.out.println(ss+ " notfound");  
-                                                }
-                                }//end else
-                  }
-		  else { bb=false; as.ST.pop();}
-	      }//endwhile
-/// end code
- */
+ 
            }      
       else b = false;
 
@@ -160,11 +149,7 @@ public String StrBuffer;  //  сюда возвращает значение wor
    while (as.ST.getDepth() != 0 ) System.out.println(as.ST.pop()+"\n" );  //////////стек
 //   for (int k=0;k<V.size();k++) System.out.println(V.elementAt(k).toString() ) ; /// вектор строк
 
- as.VM.testget(as);
-  
-   String s1 = as.VM.testgets(as,"ref")  ;
-  System.out.println(s1);
    } //main
-  static String iii = "hooos";
+
 }///	 
 	 

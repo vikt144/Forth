@@ -1,3 +1,11 @@
+/*
+  warning  <does>
+  
+  строка 873  - превышен номер фции >127
+   d>f f>d    - оттестировать
+  
+*/
+
 package forth;
 
 import java.util.*;
@@ -5,50 +13,57 @@ import java.lang.*;
 import java.lang.reflect.*;
 import java.io.*;
 
-////////////////////////////////реализация WORD//////////////////////////////////////////
-
+import java.nio.*; // ByteBuffer
 
 
 public class fas {
 
+
    public class STACK {
      public int [] stack = null;  //
+     public double [] fstack = null;  //     
      public void initStack(int stSize) { stack=new int [stSize];} // тест присвоенный стек и инициализируемый
-     public int sp;
 
-     public void push(int v) {stack[sp++] = v; } //проверить sp++
+     public int sp,fsp;  //указатели
 
+     public void push(int v) {stack[sp++] = v;   }  
      public int pop()        {return stack[--sp];} // --sp
-	
-     public int peek() { return stack[sp - 1];}  // неразрушающее чтение стэка
-	
-     public int peek2() {	return stack[sp - 2];	}
-	
+     public int peek()       {return stack[sp - 1];}  // неразрушающее чтение стека
+     public int peek2()      {return stack[sp - 2];	}
      public void drop(int i) {sp -= i;	}
-
-     public int getDepth() {	return sp; }
-
+     public int getDepth()   {return sp; }
+     //                                                  float ----------------
+     public void fpush(double v) {fstack[fsp++] = v; }  
+     public double fpop()     {return fstack[--fsp];} // --sp
+     public double fpeek()    {return fstack[fsp - 1];}  // неразрушающее чтение стека
+     public double fpeek2()   {return fstack[fsp - 2];}
+     public void fdrop(int i) {fsp -= i;    }
+     public int fgetDepth()   {	return fsp; }
    } //endstack
  
 
-public int  error=0; // -1 not number
+public int  error=0;        // -1 not number
+public int numberFormat=0;  // 1 int   3 float
 
 public volatile int BLK_ = 0 ; // перенести в память
 public  int _IN=0;       // !!!!to memory 
 public String TIB; //  строковая переменная - иммитирует tib
 public String StrBuffer;  //  сюда возвращает значение word и забирает find 
 
-int [] ii = new int[100];
 public STACK ST;// = new STACK();
-//   ST.stack = STACK. siack = new int[100];
 
-public static  boolean ifblank(char ch) {
+//////////////////////////////////////////////////////////////world///////////////////////
+
+public static  boolean ifblank(char ch, char separator) {   
    boolean ret=false;
-   if(ch == ' ' || ch == '\n' || ch == '\t' || ch=='\r') ret = true;
+   if(ch == separator) ret = true;
+    else	  
+      if (separator==' ')
+          if(ch == ' ' || ch == '\n' || ch == '\t' || ch=='\r') ret = true;
  return ret;  
  }
 
-static  public int skipBlank(String s, int _in) {
+static  public int skipBlank(String s, int _in, char separator) {
       int position; 
       position=_in; 
       boolean log=true;
@@ -56,12 +71,12 @@ static  public int skipBlank(String s, int _in) {
       if ( (position)==s.length() ) {position= -1; log = false; }  // достигнут конец потока возвращает -1
        else 
        {
-         if  ( ifblank( s.charAt(position))  ) position++;  else log=false;
+         if  ( ifblank( s.charAt(position), separator )  ) position++;  else log=false;
          }  //else
  return position;
 } //endfunk
     
- static    public int skipUntilBlank(String s, int _in) { 
+ static    public int skipUntilBlank(String s, int _in, char separator) { 
       int position; 
       position=_in; 
       boolean log=true;
@@ -69,73 +84,82 @@ static  public int skipBlank(String s, int _in) {
       if ( (position)==s.length() ) {  log = false; }  // достигнут конец  
        else 
        {
-         if  ( ! ifblank( s.charAt(position))  ) position++;  else log=false; //если не бланк
+         if  ( ! ifblank( s.charAt(position) , separator )  ) position++;  else { log=false;}//position++;} // WARNING !!!!1если не бланк
          }  //else
  return position;
 } //endfunk
   
-public   String word_( String s ) {
+public   String word_( String s, char separator ) {
   String w = null;
   int start, ends;
-  start=skipBlank(s, _IN);  
+  start=skipBlank(s, _IN , separator);  
   if (start==-1) w=""; // достигнут конец потока, возвращает слово нулевой длинны
      else {
-     ends=skipUntilBlank(s, start);  
-     _IN=ends;
+     ends=skipUntilBlank(s, start, separator);  
+
+     if ( separator == ' ') _IN=ends;
+       else _IN=ends+1;                    // костыллб для word - 
+
       w=s.substring(start,ends);  
       }
 return w;    
 }   
 
 public void WORD() {
-  int charBlank=ST.pop();     // !! снятие со стека blank -- пока не используется
+  int charBlank=ST.pop();     //  
   String s=null;
   if (BLK_==0) s=TIB;
     // else  tmp 
     //   s = (String)StringVector.elementAt(BLK_);
-  String si=word_(s);
-  StrBuffer=null; StrBuffer=si;
+  String si=word_(s , (char)charBlank );
+  StrBuffer=null; StrBuffer=si; //  System.out.println("buff="+si);
   ST.push(0);  // если 0, то сохраняет в StrBuffer
 } 
  
 public void number() {  //  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! адрес строки не реализован
+  numberFormat=0;
   int ind = ST.pop(); // снять адр строки 
-  String s = StrBuffer;
+//  ind = 0;          //   раскоментировать. если stringVector не реализован
+  String s = null;
+  if (ind == 0 ) 
+         s = StrBuffer;
+   else  s = getStringv(StringVector, ind);  // закоментировать. если stringVector не реализован
   int ii;
   try {ii = Integer.parseInt(s);
        ST.push(ii); 
-      } catch (Exception e) { error=-1; } 
+       numberFormat=1;
+      } catch (Exception e) { 
+       
+                     try { double dbl = Double.parseDouble(s);
+		           numberFormat=3;
+			   ST.fpush(dbl);  
+			   } catch (Exception ee) {       error=-1; }
+				
+		  } 
  
 }
 
-/*
- проверить можно
-// start code
-             boolean bb = true;
- 	     as._IN = 0;
-	     as.TIB=s;
-	     
-             while (bb) {
-	           as.ST.push(0);
-		   as.WORD();
-		   String ss = as.StrBuffer;
-              //     String ss =as.word_(s);
-                   as.ST.pop();
-		   if (! ss.equals("") ) {
-		      as.ST.push(0);
-		      as.number();
-		      if (as.error == -1) { as.error =0;
-                                          System.out.println(ss);
-		          }
-		        else System.out.println("add to stack");
-                  }
-		  else bb=false; 
-	      }
-/// end code
 
-*/
+///  вырезано часть 1
+
 
 //////////////////////////////////////////////////////////  vectors
+/* Vector - это массив объектов, который способен расширятся. 
+   Хранение здесь строк и прочих объектов неопределенной длинны и кол-ва
+   имеет преимущества, так как иначе бы пришлось бы выделять слишком
+   большую память для форт машины, что бы учесть все неопределенности
+
+   УЭ  - удаленый элемент
+   
+  адрес в векторе   значение 
+   0                  6       // тут хранится адрес последнего УЭ
+   1               string0   // строки
+   3               string1   
+   4                0         // самый первый УЭ   
+   5               string3    
+   6               4         // тут хранится адрес предыдущего УЭ
+   7               string5   
+*/
 public  Vector StringVector; 
 
 public Vector initVirtualMem(int i) {
@@ -186,96 +210,219 @@ public String getStringv(Vector v, int ind){
   return (String)v.elementAt(ind);
 }
 
+
 public String getTypeData( Vector v, int ind){
 return  v.elementAt(ind) . getClass().getName() ;
 }
 
 
 
-////////////////////////////////////////////////////////////////////////////////////
 
- public short[] memory = new short[2000];  //выделяем память из 16 битных целых размером в 2000 
-public   static int here;  // адрес переменной HERE в массиве memory
-public   static int latest; // адрес переменной LATEST в массиве memory
-public   static int state;
-
-
-
-
- public  void immediate() {
-   
-   short l = memory[latest];
-   short i = memory[l+1];
-   if (i>0) i = (short)(0-i);
-   memory[l+1]=i;
- }
- 
- 
-public void comma16() {  // эквивалентно запятая "," только снимает 16 bit
-  short i = (short)ST.pop();
-  int adr = memory[here];
-  memory[adr]=i; 
-  memory[here]++;
+public  void ascii() {  ST.push(32); WORD();
+                        ST.pop(); 
+			ST.push( (int)StrBuffer.charAt(0) ) ;
 }
 
+ public void qstring() {  // s"  на верш длина 
+   int N = TIB.indexOf('\"' ,  _IN);
+   String s = TIB.substring(_IN,N);
+   ST.push( appendData(StringVector, s )  ); //appendData возвращает индекс на строку
+   ST.push( s.length() );
+   _IN = N+1;    
+ }
+
+  public void printIt(String s) {
+      byte[] b = null; 
+      try {
+      b = s.getBytes("UTF8"); //new String(utf8Bytes, "UTF8");
+      String utf_ = new String(b, "UTF8"  );
+      System.out.println(utf_ ); // конвертация в utf8
+      } catch (Exception e ) {} 
+  }
+
+ public void stype() {  // type
+   ST.pop(); //сбросить длинну
+   int ind = ST.pop(); 
+   String str;
+   if (ind == 0) str = StrBuffer;
+     else str = getStringv(StringVector, ind) ;
+    printIt( str );
+ }
+
+
+ public void sconcat() {  //s+  s0 l0 s1 l1 -- sn ln  - соединение строк
+   int l0 = ST.pop();  int s0 = ST.pop();
+   int l1 = ST.pop();  int s1 = ST.pop(); 
+   String str0 = getStringv(StringVector, s0);
+   String str1 = getStringv(StringVector, s1);
+   String str=str1+str0;  
+   ST.push( appendData(StringVector, str )  ); //appendData возвращает индекс на строку
+   ST.push( str.length() );
+ }
+
+  public void sequals() {  
+   int l0 = ST.pop();  int s0 = ST.pop();
+   int l1 = ST.pop();  int s1 = ST.pop(); 
+   String str0 = getStringv(StringVector, s0);
+   String str1 = getStringv(StringVector, s1);
+   if (str1.equals(str0) )   
+                    ST.push( -1 ); 
+      else
+       ST.push( 0 );
+ }
+
+ public void spick() {  // adr length   --  adr1 len1   дублирует строку
+       int l = ST.pop();  int sAdr = ST.pop();
+       String str;
+       if (sAdr==0) str = StrBuffer; 
+          else  str = getStringv(StringVector, sAdr);
+       ST.push( appendData(StringVector, str )  ); 
+       ST.push( str.length() );
+ }
+
+
+
+////////////////////////////////////////////////////////////////////////////////////
+
+public     int here;  // адрес переменной HERE в массиве memory
+public     int latest; // адрес переменной LATEST в массиве memory
+public     int state;
+
+public     int context ;
+public     int current  ;
+public     int forthVoc ; 
+
+ public ByteBuffer mem;// = ByteBuffer.allocate( 10000  /* max capacity */ );
+
+ public ByteBuffer createMemory(byte[] B , int size) {
+   int sz=10000;  //память по умолчанию
+   ByteBuffer bb=null;
+   if (B==null) {
+      if (size!=0) sz=size;         // создание нового образа памяти 
+      bb=ByteBuffer.allocate( sz  /* max capacity */ );
+      }
+    else 
+      bb=ByteBuffer.wrap( B );  // создание на основе существ. массива байт
+ return bb;
+ } 
+
+
+/// -->
+
+ 
+///<---
 
 /* 
 Создает в памяти
-
-
+link  int               0  - указатель на поле link предыдущей статьи  
+flag  byte              4  - поле имени - флаги
+size  int  -            5  - поле имени -   длинна строки 
+adr   int               9  - поле имени - - индекс на строку или адрес строки
+cfa   int               13 - cfa
 */
+
+ public int newDict(String name, int prevAdr,byte flags) { // создает статью, возвращает адрес новой статьи
+   int linkToThisDict = mem.getInt(here); // получить here   
+   compile_int (prevAdr );  //  - указатель на предыдущую статью 
+   compile_byte( flags);    
+   compile_int ( name .length() );  
+   int adr = appendData(StringVector, name) ;
+   compile_int (adr);
+   compile_int (0);   // в cfa записывается 0, что означает, что при исполнение слова, на стеке будет pfa   
+   return linkToThisDict;
+ }
 
  public  void cre0(String s) {   // временная вспомогательная ф-ция. создающая упрощенную запись в словаре 
    String STR = s. toUpperCase(); // реализовать проверку на ""  // 
-   short tmp = memory[here]; //получить here   
-   ST.push(memory[latest] );  
-   comma16();                    //записывает указатель на предыдущую статью 
-   memory[latest]=tmp;          // latest присваевается указатель на эту статью 
-   ST.push( s.length() );  
-   comma16();                 // записывается длинна строки 
-   ST.push( appendData(StringVector, STR) ); //appendData возвращает индекс на строку
-   comma16();              // записывается  индекс на строку
-   ST.push(0);
-   comma16();          // в cfa записывается 0
+//   int hereValue = mem.getInt(here); //short tmp = memory[here]; //получить here   
+   int currentAdr   = mem.getInt(current);
+   int prv = mem.getInt(currentAdr);        //указатель на предыдущую статью 
+
+   int len = STR.length();
+
+   int hereValue = newDict(STR, prv, (byte)0);
+
+   mem.putInt(latest,hereValue);
+   mem.putInt(currentAdr, hereValue);
+
  }
 
- public  void cre1() { // (String s) {   // временная вспомогательная ф-ция. создающая упрощенную запись в словаре 
-  ST.push(666);  // код бланк для word - пока не используется
+ public  void cre1() { 
+  ST.push(32); 
   WORD();
   ST.pop();            // сброс стека, world пока возвращает только 0
   cre0(StrBuffer);
  }
 
-public void setCFA() {
+
+public void setCFA() {  /////////////////////////////////////////////*
   int i = ST.pop();     // снять со стека нужное значение cfa 
-  memory[ memory[latest] + 3] = (short)i;    
-  if (i < 0) System.out.println("cfa  -- "+i); 
+  ST.push(  mem.getInt(latest)  );  //int tmp = mem.getInt(latest);
+  Link_();
+  int aCFA = ST.pop(); 
+  mem.putInt(aCFA , i);
 }
+
+ public  void immediate() {
+   ST.push(  mem.getInt(latest)  );
+   L_name();
+   int tmp = ST.pop(); 
+   mem.put(tmp, (byte)1 );
+//  System.out.println("set imediate " );
+ }
+ 
+public void L_name() {   // - на стеке  адрес Link возвращает на стек адр поля имени
+    int i = ST.pop(); 
+    ST.push(i+4);
+} 
+
+public void name_() {  // name --> cfa
+    int i = ST.pop(); 
+    ST.push(i+9);
+}
+
+public void Link_() {  // link --cfa
+       int i = ST.pop(); 
+       ST.push(i+13);
+}
+
+public void _body() {  // cfa -- pfa
+  int i = ST.pop();
+  ST.push(i+4);
+}
+
 
 /*
 ИСКАТЬ СЛОВО Т В ТЕКУЩЕМ КОНТЕКСТЕ ЕСЛИ N=0, ТО А=Т И СЛОВО НЕ НАЙДЕНО, ИНАЧЕ A=CFA НАЙДЕННОЙ СТАТЬИ, N=1 ДЛЯ СЛОВ "IMMEDIATE" И N=-1 ДЛЯ ОСТАЛЬНЫХ
 */
- 
-public void FIND() { //поле кода   n 0 - не найдено  если не отрицательно то immediate 
+ //поле кода   n 0 - не найдено  если не отрицательно то immediate 
+public void FIND0(int cntxt) {  //переменная cntx - адрес ( link ) последней словарной статьи в данном context
  int ret=0;
  boolean bool=false;
- ST.pop(); // сброс стека, ----> 0 тут должен анализ ecли  0 то  s=StrBuffer иначе из вектора
+ ST.pop(); // сброс стека, ----> 0 тут должен анализ ecли  0 то  s=StrBuffer иначе из вектора  var fff  10 fff !  fff @ .
  String s=StrBuffer. toUpperCase();
-
+ String si = null;
   boolean immediate=false;
- int tmp=memory[latest];
+ int tmp0 = mem.getInt(cntxt); //int tmp=memory[latest];
+ int tmp  =  mem.getInt(tmp0);
  while (tmp != 0 && ! bool) {
-   immediate=false;  
-   int len = memory[tmp+1];
-   if (len<0) {immediate=true;} // если длинна слова отрицательна  - immediate=true; 
-   int ind = memory[tmp+2]; // получаем инд в векторе  	     
-   String si = (String)StringVector.elementAt(ind);
+   immediate=false;     // заменить на анализ битов
+   ST.push(tmp); 
+   L_name();   
+   int nameField = ST.pop();       //  получить адр поля имени 
+   byte  flag = mem.get(nameField); //  получить флаг
+   if (flag /*len<0 */ !=0) {immediate=true;} // если длинна слова отрицательна  - immediate=true; 
+   int ind = mem.getInt( nameField+5);// tmp+9);//  nameField+5);//    // получаем инд в векторе  	( nameField+1  длинна строки)    
+//   System.out.println("ind "+ ind);
+   si = (String)StringVector.elementAt(ind);
    if ( s.compareTo(si)==0) {
-      bool = true;    
-      ret=tmp+3;// memory[tmp+3]; //cfa
+      bool = true;
+      ST.push(nameField);   
+      name_();  // на стеке cfa      
+      ret = ST.pop(); // tmp+13;//mem.getInt(tmp+13);// tmp+3; //cfa
       }                     
     else
-    tmp=memory[tmp]; 
+    tmp= mem.getInt(tmp);  //(memory[tmp]; 
  
  }//while  
  
@@ -283,50 +430,29 @@ public void FIND() { //поле кода   n 0 - не найдено  если �
  if (ret==0) ST.push(0);
          else 
 	 if (   ! immediate) ST.push(-1);  
-	   else {ST.push(1); System.out.println("immediate!!");}
+	   else {ST.push(1);  /* System.out.println("immediate!! "+si )  */ }
  
 }  
 
+public void FIND() {
+  FIND0(context);
+  
+  int i = ST.pop();
 
-// link strsize nomberVector 
+  if ( i ==0 && current != context ) { //если не найден в контексте
+        FIND0(current);
+	i = ST.pop();
+       }
+  if ( i ==0 && current != forthVoc && context != forthVoc)  {
+        FIND0(forthVoc);
+	i = ST.pop();
+        }  
+  ST.push(i) ; //вернуть стек
+ 
+ }
 
-/*  протестировать можно     
-// start code
-             boolean bb = true;
- 	     as._IN = 0;
-	     as.TIB=s;
-	     
-             while (bb) {
-	           as.ST.push(0);
-		   as.WORD();
-		   String ss = as.StrBuffer;
-              //     String ss =as.word_(s);
-                   as.ST.pop();
-                   
-		   if (! ss.equals("") ) {
-	         	      as.ST.push(0);
+/// вырезано часть вторая
 
-                              as.FIND();
-		             int i =  as.ST.pop();
-		             if (i != 0) {
-		                    System.out.println(ss+" - найдено");
-			            as.ST.pop(); //сбросить признак immediate   // сбросить адрес ?
-			            }
-	 		           else {   as.ST.pop();// System.out.println(ss+" - ненайдено");  
-		                        as.ST.push(0); 
-					as.number();			
-			                if (as.error != -1)  {System.out.println(ss+" add to stack"); } 
-	         		            else { as.error = 0; 
-		           	                 as.cre0(ss);
-                                                 System.out.println(ss+ " add to vocabulary");  
-                                                }
-                      //             as.ST.pop(); //сбросить признак immediate
-                                }//end else
-                  }
-		  else bb=false; 
-	      }//endwhile
-/// end code
-*/
 
 
 ////////////////////////////////////////////////////////////////////////////////////FVM////////////////////////////////
@@ -339,17 +465,12 @@ http://forthworks.com/retro/
 
 public class FVM {
  
- 
-        public int IMAGE_SIZE=2024;  //my   this is param for imgsize
-
         private int sp = 0, rsp = 0, ip = 0; // указатели стека, стека возвратов и адрес команды
  
         public STACK stack,adrStack;    //стеки  
 
-        public short[] image=null;  // память
-
         public int [] ports;  // порты ввода вывода
-  
+
 
   public static final int
     VM_NOP = 0 ,
@@ -366,65 +487,55 @@ public class FVM {
     VM_INC = 26 ,  VM_DEC = 27 ,
     VM_IN = 28 ,  VM_OUT = 29 ,  VM_WAIT = 30, // записсь чтение портов , ожидание
    
-    VM_LIT32 = 31 ,// положить 32 битное значение на стек
-    VM_FETCH16 = 32 ,  VM_STORE16 = 33   // c@  c!   
+    VM_LIT8 = 31 ,// положить 8 битное значение на стек
+    VM_FETCH8 = 32 ,  VM_STORE8 = 34,  VM_FLIT = 33 // c@      c! flit 
      ;
 
   private void handleDevices() {  // от ретро, // вызывается командой wait
         //зависит от реализации
   }
 
+
+  public Object  Ob; 
  private void callService(int port, int y) { // вызывается во время записи в порт (out)
         // зависит от реализации
    
+  if (port==8)  { /* System.out.println("port=8 ") */ ;runProcedure( Ob , procedureLists[y]);
+  }
+  else 
    if (port != 0) System.out.println("нетот порт "+ port);
      else
      {
      switch (y) {
        case 0 : _HALT=true; break;
-       case 1 : System.out.println("st= "+stack.pop() ); /*_HALT=true; */ break;
-       case 2 :  proc(); /* _HALT=true; */  break;
-       case 3 :  ret(); /* _HALT=true; */ System.out.println("ret");  break;
-       case 4 :  cre1(); System.out.println("fvm create ");  break;
-       case 5 :  allot(); break;
-       case 6 :   does_(); break; 
-       case 7 :   comma();     break;  
-       case 8 :   here() ;    break;      
-       case 9 :   compile();     break;  
-       case 10 :   immediate();     break;  
-       case 11 :   resolve_();     break;  
-       case 12 : _resolve();     break; 
- //      case 13 :   as.loadScr();     break; 
-        case 14 :   comment();     break; 
- //      case 15 :   as._loop_();      break; 
- //      case 16 :   as.compile2();     break;                
-        case 17 :   ascii();     break;
-        case 18 :  qstring();     break; 
-        case 19 :  stype();     break; 
-        case 20 :  qtype();     break; 
-        case 21 :  sconcat();     break; 
-//      case 6 :   as.     break; 
-//      case 6 :   as.     break; 
-//      case 6 :   as.     break;               
-             //as.colon1(); _HALT=true;  break;           
-      } //switch
+       case 1 : System.out.print( /*"st= "+ */stack.pop()+" " ); /*_HALT=true; */ break;
+ //      case 2 :  proc(); /* _HALT=true; */  break;
+       } //switch
    }//else
  }
  
-  /**    * Process a single opcode*/ 
-// 
-//  public int magicValue = 200; //  если опкод превысит это значение  то или call или jump туда
 
+  public boolean _HALT =  false;  //Переменной Halt присваиваются значение во время выполнения
+                                //callService, при исполнении инструкции out
+
+ public void processImage( int startIP ) {
+  // ip=startIP;
+  _HALT=false;
+  mem.position(startIP);
+  while  ( /*ip<IMAGE_SIZE  && */ ! _HALT) {
+      process(); 
+     // ip++;
+     }
+  } //void
+  
 
   private void process() {
-
-  int x, y, z,tmp,  op;
-  op = image[ip];
-        switch(op) {
-
+      int x, y, z,tmp, op ;
+   op=mem.get();      //  System.out.println("cod="+op);
+   switch(op) {
     case VM_NOP:
       break;
-    case VM_LIT:    ip++;stack.push(image[ip]); // положить 16 битное значение на стек
+    case VM_LIT:    stack.push(   mem.getInt( /* mem.position() */ )   )  ;  //!!!!!!!!!!!!!!!!!!  
       break;
     case VM_DUP:    tmp=stack.pop(); stack.push(tmp);stack.push(tmp);
       break;
@@ -437,14 +548,14 @@ public class FVM {
     case VM_POP:    x = adrStack.pop(); stack.push(x); // обратно  R>
       break;
 
+    case VM_CALL:   x = mem.getInt(); adrStack.push(  mem.position() )  ;   mem.position(x);//-1);// !!!    ///ip++; adrStack.push(ip); ip=image[ip]-1;
+      break;
+    case VM_JUMP:  x = mem.getInt();    mem.position(x);//-1);   //  ip++;    ip = image[ip]-1;
+      break;
+    case VM_RETURN: //int iie=adrStack.pop();System.out.println("adr return=" + iie);mem.position( iie);
+                    mem.position( adrStack.pop() ) ; //  ip = adrStack.pop();
+      break;
 
-    case VM_CALL:  ip++; adrStack.push(ip); ip=image[ip]-1;
-      break;
-    case VM_JUMP:  ip++;    ip = image[ip]-1;
-      break;
-    case VM_RETURN:
-      ip = adrStack.pop();
-      break;
     case VM_GT : //    //    0 В ФОРТЕ -- FALSE 
       x = stack.pop();  if (x>0) x=-1; else x=0; stack.push(x);
       break;
@@ -454,22 +565,19 @@ public class FVM {
     case VM_EQ : // ip++;
       x = stack.pop();  if (x==0)  x=-1; else x=0 ; stack.push(x);
       break;
-    case VM_EQ_JUMP:  ip++;
-     x = stack.pop(); if (x==0) ip = image[ip] - 1;     
+    case VM_EQ_JUMP:  y = mem.getInt();  x = stack.pop(); 
+                      if (x==0) mem.position(y);//-1);  //ip++;  x = stack.pop(); if (x==0) ip = image[ip] - 1;     
       break;
-   
+
    
     case VM_FETCH: /// @
-      tmp=stack.pop();                        // со стека снимается адрес
-      x=image[tmp]; tmp++; y=image[tmp];      // с этого адреса снимаются две соседние
-      stack.push(x << 16  | y & 0xffff  );  // 16битные ячейки и с помощью сдвига и AND
-      break;              // объединяются в 32 битное значение и кладутся на стек
-
-
-    case VM_STORE:  //    //  обратная операция 32 битное знач. разлагается
-    x = stack.pop(); y= stack.pop(); // на два 16 битных с помощью сдвигов 
-    short a=(short)y ,  b = (short) (y >> 16);
-    image[x]=b; x++ ;  image[x]=a;
+      tmp=stack.pop();      
+      x=mem.getInt(tmp);    
+      stack.push(x);        
+      break;               
+    case VM_STORE:  //    
+       x = stack.pop(); y= stack.pop();  
+       mem.putInt(x,y);    
       break;
 
     case VM_ADD:    x = stack.pop(); y= stack.pop();stack.push(y+x);
@@ -492,7 +600,7 @@ public class FVM {
       break; 
     case VM_SHR:  x = stack.pop(); y= stack.pop();stack.push( y >>= x );  //  вправо
       break;
-    case VM_ZERO_EXIT:    // выход из подпрограммы, если на стеке 0
+    case VM_ZERO_EXIT:    // выход из подпрограммы, если на стеке 0 -- не используется
       if (stack.peek() == 0)
       {
         stack.drop(1);
@@ -518,102 +626,74 @@ public class FVM {
       break;
     case VM_WAIT:  handleDevices(); // наследство от  ретро
       break;
+    case VM_LIT8:  // положить 8 битное значение
+       stack.push(   mem.get()   )  ;
+      break;
 
-    case VM_LIT32:  // положить 32 битное значение
-      ip++; x=image[ip]; ip++; y=image[ip];  stack.push( x << 16  | y & 0xffff );
-      break; //2 16 битные ячейки объединяются в 32 битную с помощью сдвигов
-
-    case VM_FETCH16: /// c@
+    case VM_FETCH8: /// c@
       tmp=stack.pop();                        // со стека снимается адрес
-      x=image[tmp];  
+      x=mem.get(tmp);  
       stack.push(x ); 
       break;          
 
-    case VM_STORE16:  // c!   //  обратная операция 32 битное знач. разлагается
-    x = stack.pop(); y= stack.pop(); // на два 16 битных с помощью сдвигов 
-   // short 
-     b = (short) (y);
-    image[x]=b; 
+    case VM_STORE8:  // c!   //  
+      x = stack.pop(); y= stack.pop(); //
+      mem.put(x,(byte)y);
       break;
 
-  }
-}
+    case VM_FLIT:
+      stack.fpush(   mem.getDouble()   )  ;      
+       break;      
 
+        }
+   }	
+    
+//                                                            reflections api
+ public Method [] procedureLists = new Method[100];
+ int procedureIndex=0;
 
-  public boolean _HALT =  false;  //Переменной Halt присваиваются значение во время выполнения
-                                //callService, при исполнении инструкции out
-
- public void processImage( int startIP ) {
-  ip=startIP;
-  _HALT=false;
-  while  (ip<IMAGE_SIZE  && ! _HALT) {
-      process(); 
-      ip++;}
-  } //void
-  
-   public void processImageQ( int startIP ) {ip=startIP;  process();}
-
-
-
- public String testgets(Object o, String f) {
-  String  ret = null;
-  try {
-       Field field = o.getClass().getDeclaredField(f);
-       field.setAccessible(true);
-       String  name = (String) field.get(o);
-       ret = name;
-   } catch (NoSuchFieldException | IllegalAccessException e) {
-       e.printStackTrace();
-       
-   }
- return ret;
+ public Method registerProcedure( Object o, String procName) {
+     Method method=null;
+     try {
+       method = o.getClass().getDeclaredMethod( procName );
+       method.setAccessible(true);
+     } catch (NoSuchMethodException e )   
+        {
+         e.printStackTrace();
+         }   
+ return method;  
+ } 
+ 
+ public void buildProcedure( Object o, String procName) {
+      Method method;
+      method=registerProcedure(o, procName);
+      int index = procedureIndex;
+      procedureIndex++;
+      procedureLists[index]=method;
+      cre0(procName);
+      setout_( index /* functNum */ , 8 /*int portNum */, true /*boolean ret*/ );       
  }
 
- public String testget(Object o) {
-  /*
-  try {
-       Field field = fas.getClass().getDeclaredField("ref");
-       field.setAccessible(true);
-       String  name = (String) field.get(fas);
-   } catch (NoSuchFieldException | IllegalAccessException e) {
-       e.printStackTrace();
-   }
-  */
-  Class<fas> carClass = fas.class;
-Field[] declaredFields = carClass.getDeclaredFields();
-for (Field field :declaredFields) {
-    System.out.println(field);
+//https://docs.oracle.com/javase/8/docs/api/java/lang/reflect/Method.html#invoke-java.lang.Object-java.lang.Object...-
 
-}
-Field fis;
-Field fii;
-try {
- fis = carClass.getDeclaredField("ref") ;  
-/// fis.setAccessible(true);
- String stri = (String) fis.get(o);  
-  System.out.println(fis + "----s "+stri);
- fii = carClass.getDeclaredField("refi");   int ii = fii.getInt(o);  System.out.println(fii + "----i "+ii);
-
-  fis.set(o, "newwal" );
-  System.out.println(ref);
-  fii.setInt(o,666);
-    System.out.println(refi+ "new int");
-} catch (NoSuchFieldException | IllegalAccessException e) {
-    e.printStackTrace();
-    }
-
-// String stri = (String) fis.get(carClass);
-/// int   ii =  serialNumberField.getInt(fii);
-  return null;
-  
-  }//testget
-
+ public void runProcedure(Object o, Method method) {
+     try {
+        method.invoke(o);
+     } catch ( // NoSuchMethodException | 
+               InvocationTargetException | IllegalAccessException e) 
+        {
+         e.printStackTrace();
+         } 
+  }
+						       
  }  //
-
 /////fvm
- public String ref = "ginger";
- public int refi = 3;
+
+
+/// public String ref = "ginger";
+/// public int refi = 3;
  
+public void print() { System.out.println(StrBuffer); }
 
  public FVM VM;
 
@@ -629,20 +709,33 @@ try {
   "   AND  20   -1   OR  21 -1   XOR  22  -1 SHL  23  -1  SHR  24 -1 "     +
   "   ZERO_EXIT  25 -1    1+  26  -1   1-  27 -1 "        +
   "   IN  28  -1  OUT  29 -1    WAIT  30  -1 "            +
- "    LIT32  31 -1  c@ 32 -1 c! 33 -1 "  + // endpart -111 -1 "   +
+ "    LIT8  31 -1  c@ 32 -1  flit 34 -1   c! 33 -1 "  + // endpart -111 -1 "   +
+
  " EXIT . " + 
- //  lit 2  lit 0 out ;  notimm        ret immediate
- " :  1  2  1   0 29  9    n        ; 1  3  1  0  29  9  i    create  1 4  1 0 29  9  n " +
 
- " allot 1  5  1  0 29 9  n    does> 1  6  1  0 29 9  n    , 1  7  1  0 29 9  n    here 1  8  1  0 29 9 n " +
+//   fort_name  java_void_name  i/n  - immediate or not
+
+" : proc n        ; ret i       create cre1 n     allot allot n       does> does_  n      , comma n    here here n " + 
+"   word WORD n   find FIND n  print print n   literal literal n" +
  
- " compile 1  9  1  0 29 9  n   immediate 1  10  1  0 29 9  n    >resolve 1  11  1  0 29 9  n   <resolve 1  12  1  0 29 9  n " +
+ " compile compile  n    compile_call compile_call n    immediate immediate n    >resolve resolve_ n   <resolve _resolve n " +  
+ " name> name_ n   L>NAME L_name n      link> Link_  n  >body _body n  state@ getState n " +  
 
- " load 1  13  1  0 29 9  n    ( 1  14  1  0 29 9  i  (loop) 1  15  1  0 29 9  n   compile2 1 16  1  0 29 9  n "   + 
- " ascii 1 17  1  0 29 9  n    s\" 1 18 1 0 29 9 i    type 1 19  1 0 29 9  n  .\" 1 20 1 0 29 9 i  s+  1 21 1 0 29 9 n " +
- " end_all 9 n " +
+ "     (  comment  i    "   + 
+ " ascii ascii n    s\" qstring i    type stype n  .\" qtype  i  s+ sconcat n    spick spick n" +
+ " s= sequals n " +
+
+//float words
+ " fdup fdup n   fswap fswap n   fdrop fdrop n " +
+ " f.  fprint_ n  f! fstore n  f@ fload n     f+  fadd n   f- fsub n       f* fmul  n   f/ fdiv n "  +
+ " f> fgreater n   f= fequals  n    f< fless n   f<> fnotequals n   f<= flessORequal n  f>= fgreaterORequal n  " +
+ " fsin fsin n    fcos fcos n  ftan ftan n  fasin fasin n  facos facos n  fatan fatan n  fatan2 fatan2 n" +
+ " fln fln  n   flog flog n    fsqrt fsqrt n   fexp fexp n   fabs fabs n  floor floor n  d>f longToFloat n   f>d floatToLong n "  + //   
+
+ "   ;;   " +
+//  */
  " : <   - 0< ; \n  : =   - 0= ;  \n  : >  - 0> ;  \n \n \n " +
- ": >mark here 1 allot ;  \n  : <mark here ; \n \n \n " + 
+ ": >mark here 4 allot ;  \n  : <mark here ; \n \n \n " + 
 
  " : if compile ?branch  >mark ; immediate \n" +
  " : then >resolve ; immediate \n " +
@@ -653,13 +746,13 @@ try {
  " : while  compile ?branch  >mark   ; immediate \n " +
  " : repeat  compile branch  swap <resolve  >resolve ; immediate \n \n \n" +
 
- " : var   create 2 allot   ;  \n  : const create , does> @ ; \n\n " +
+ " : var   create 4 allot   ;  \n  : const create , does> @ ; \n\n " +
  
- " var tmpregistr0  var tmpregistr1  var tmpregistr2  \n\n " +
+ " var tmpregistr0  var tmpregistr1  var tmpregistr2  \n\n "  +
  
  " : over swap dup  tmpregistr0 ! swap tmpregistr0 @   \n ; " +   
  " : rot  tmpregistr0 ! tmpregistr1 !  tmpregistr2 !       tmpregistr1 @  tmpregistr0 @ tmpregistr2 @ ; \n" + 
- " : ?DUP ( A -> A,A/0 )  DUP  IF DUP THEN ; \n" + 
+  " : ?DUP ( A -> A,A/0 )  DUP  IF DUP THEN ; \n" + 
  " : R@ R> dup >R ; \n" + 
 
  " :  /   /mod swap drop ; \n" + 
@@ -672,284 +765,344 @@ try {
  " : ABS ( A --->абс A ) DUP 0< IF NEGATE THEN ; \n" + 
 
  " : 2dup    tmpregistr0 ! tmpregistr1 !     tmpregistr1 @ tmpregistr0 @    tmpregistr1 @ tmpregistr0 @  ; \n" + 
- " : 2drop  drop drop ; \n" 
+ " : 2drop  drop drop ; \n" +
+ " : 2var create  8 allot ;  \n" +
+ " : 2!  dup tmpregistr0 ! ! tmpregistr0 @ 4 + ! ;   \n" +
+ " : 2@  dup @ swap 4 + @  swap ;   \n"
 
  ;   
 
+  public long int2long()  {int int0 = ST.pop(); int int1 = ST.pop();
+                           return (int0 << 32 | int1 & 0xffffffff) ; 
+  }
+  public void long2int(long l)  {int int0 = (int)l ; int int1 = (int)(l>>32);
+                                 ST.push(int1) ; ST.push(int0) ;
+  }  
+
+  public void longToFloat(){ ST.fpush( (double)int2long() );  } //    
+  public void floatToLong(){  long2int( (long) ST.fpop()  );  } 
+
+//  fdup fswap fdrop
+//  f.  f! f@  f+ f-  f*  f/   f> f< f= f<> f>= f<=
+// fsin fcos ftan  fasin facos fatan fatan2 
+// fln flog  fsqrt fexp fabs floor  d>f f>d
+
+  public void  fdup () { double tmp = ST.fpop(); ST.fpush(tmp); ST.fpush(tmp); }   
+  public void  fswap() { double tmp = ST.fpop();  double tmp1 = ST.fpop(); ST.fpush(tmp);ST.fpush(tmp1);}
+  public void  fdrop() { double tmp = ST.fpop();}
+
+  public void fprint_()  {
+    System.out.println("dbl=" + ST.fpop() );
+  }
+  public void fstore() {
+     int adr = ST.pop();
+     mem.putDouble(adr, ST.fpop() ) ;
+  }
+  public void fload()  {
+      int adr = ST.pop();
+      ST.fpush( mem.getDouble(adr) ); 
+  }
+  
+  public void fadd()  {  double f1,f2;  f1=ST.fpop(); f2=ST.fpop(); ST.fpush(f2+f1); } 
+  public void fsub()  {  double f1,f2;  f1=ST.fpop(); f2=ST.fpop(); ST.fpush(f2-f1); }   
+  public void fmul()  {  double f1,f2;  f1=ST.fpop(); f2=ST.fpop(); ST.fpush(f2*f1); } 
+  public void fdiv()  {  double f1,f2;  f1=ST.fpop(); f2=ST.fpop(); ST.fpush(f2/f1); } 
+
+  public void fgreater(){  double f1,f2;  f1=ST.fpop(); f2=ST.fpop();  // f>
+                           if ( (f2 - f1) > 0 )  ST.push(-1);    //true
+				else  ST.push(0);  //false
+   } 
+
+  public void fequals(){  double f1,f2;  f1=ST.fpop(); f2=ST.fpop();  // f=  
+                           if ( (f2 - f1) == 0 )  ST.push(-1);    //true
+				else  ST.push(0);  //false
+   }    
+  public void fless(){  double f1,f2;  f1=ST.fpop(); f2=ST.fpop();  // f< 
+                           if ( (f2 - f1) < 0 )  ST.push(-1);    //true
+				else  ST.push(0);  //false
+   }     
+  public void  fnotequals (){  double f1,f2;  f1=ST.fpop(); f2=ST.fpop();  // f<>
+                           if ( (f2 - f1) != 0 )  ST.push(-1);    //true
+				else  ST.push(0);  //false
+   }     
+  public void  flessORequal(){  double f1,f2;  f1=ST.fpop(); f2=ST.fpop();  // f<=
+                           if ( (f2 - f1) <= 0 )  ST.push(-1);    //true
+				else  ST.push(0);  //false
+   }      
+  public void  fgreaterORequal(){  double f1,f2;  f1=ST.fpop(); f2=ST.fpop();  // f>=
+                           if ( (f2 - f1) >= 0 )  ST.push(-1);    //true
+				else  ST.push(0);  //false
+   }   
+
+  public void fsqrt()  {  ST.fpush( Math. sqrt(  ST.fpop()  )  ) ; } 
+  public void fexp()  {  ST.fpush( Math. exp  (  ST.fpop()  )  ) ; } 
+  public void fln()  {  ST.fpush( Math. log   (  ST.fpop()  )  ) ; }  // натуральный логарифм 
+  public void flog()  {  ST.fpush( Math. log10(  ST.fpop()  )  ) ; } 
+  public void fabs()  {  ST.fpush( Math. abs(  ST.fpop()  )  ) ; } 
+  public void floor()  {  ST.fpush( Math. floor (  ST.fpop()  )  ) ; }   
+
+  public void fsin()  {  ST.fpush( Math. sin (  ST.fpop()  )  ) ; }
+  public void fcos()  {  ST.fpush( Math. cos (  ST.fpop()  )  ) ; } 
+  public void facos()  {  ST.fpush( Math. acos (  ST.fpop()  )  ) ; } 
+  public void fasin()  {  ST.fpush( Math. asin (  ST.fpop()  )  ) ; } 
+  public void ftan()   {  ST.fpush( Math.  tan (  ST.fpop()  )  ) ; }      
+  public void fatan()  {  ST.fpush( Math. atan (  ST.fpop()  )  ) ; }   
+  public void fatan2() {  ST.fpush( Math. atan2(  ST.fpop() ,  ST.fpop()   )  ) ; } // проверить порядок данных в стеке
+    
  public void initFVMwords() {
    TIB = null; TIB = initwords;
    _IN=0;
   boolean enddo=false; //для выхода из цикла
   do {
-      ST.push(666);  WORD();  // на стеке 0    
+      ST.push(32);  WORD();  // на стеке 0    
       ST.pop();  // сброс стека
       String  name  = StrBuffer;
       cre0(name);
-      ST.push(666); WORD(); // opcode
+      ST.push(32); WORD(); // opcode
       ST.pop();  // сброс стека
       int code=0;
       try { code=Integer.parseInt(StrBuffer);} 
           catch (Exception e){}
-      ST.push(code); comma16();  // компилипуем opcode
-      ST.push(666); WORD(); // immediate
+     // ST.push(code); comma16();  // компилипуем opcode
+      int tmp = mem.getInt(here);
+      mem.put(tmp,(byte)code);  // mem.putInt(tmp,(byte)code);
+      ST.push(32); WORD(); // immediate
       ST.pop();  // сброс стека         пропускаем immediate
 
       ST.push(1);  setCFA();   
-      ST.push(9); comma16();  // 9 - код операции ";" возврат из подпрограммы 
+
+      mem.put(tmp+1,(byte)9); //      mem.putInt(tmp+1,(byte)9);
+      mem.putInt(here,tmp+2);      
+            
       if (name.compareTo("c!") == 0)
                             enddo=true;
       } while (! enddo) ;		    
   }
  
-/// lit  2  lit 0 out ;   1 2 1 0 29 9
- public void initEXTwords() {           //  перенести вниз перед comma
+ 
+ public void setout_( int functNum, int portNum , boolean ret) { // создает последовательность кодов " lit8 functNum  lit8 portNum "
+      int tmp = mem.getInt(here);                   // получить here
+      mem.put(tmp,(byte)31);       tmp++;        // записать код 31 "lit8"
+      mem.put(tmp,(byte)functNum); tmp++;        //warning переписать на случай   functNum> 127  
+      mem.put(tmp,(byte)31);       tmp++;    ///////////////////////////////////////////////переделать mem.putInt mem.put
+      mem.put(tmp,(byte)portNum ); tmp++;  
+      mem.put(tmp,(byte)29); tmp++;        //out
+      if (ret)  {  
+          mem.put(tmp,(byte)9);    
+	  tmp++; }   // 9 - код операции ";" возврат из подпрограммы 
+      mem.putInt(here,tmp);                  // обновить here
+ }
+ 
+
+
+
+ public void initEXTwords_2(Object o) {           //  перенести вниз перед comma
     boolean enddo=false; //для выхода из цикла
-    boolean endparam=false; //для выхода из цикла    
+    boolean endparam=false;
+ 
     do {
-      ST.push(666);  WORD();  // на стеке 0    
+      ST.push(32);  WORD();  // на стеке 0    
       ST.pop();  // сброс стека
       String  name  = StrBuffer;
-      cre0(name);
-
-      do {
-          endparam=false; //для выхода из цикла    
-          ST.push(666);  WORD();  // на стеке 0    
-          ST.pop();  // сброс стека
-          String  s  = StrBuffer;          
-          int code=0;
-          try { code=Integer.parseInt(s);
-                ST.push(code); comma16();  // компилипуем opcode	       
-	     } 
-             catch (Exception e){
-	            if (s.equals("i") ) 
-		                        immediate();
-                    ST.push(2);  setCFA();      // cfa = 2   		     
-                    endparam=true;
-		    }	  
-	  //param
-     
-	 } while (! endparam) ;
-      if (name.compareTo("end_all") == 0)
-                            enddo=true;
-   } while (! enddo) ;		
+      if ( ! name.equals(";;") ) {                //если слово не ;;  то
+               //  VM.buildProcedure(  o, name );  //
+		 cre0(name);
+                 ST.push(32);  WORD();  // на стеке 0    
+                 ST.pop();  // сброс стека
+                 String  proc_name = StrBuffer;
+		 Method method = VM.registerProcedure(o, proc_name);
+                 int index = VM.procedureIndex;
+                 VM.procedureIndex++;
+                 VM.procedureLists[index]=method;
+                 setout_( index /* functNum */ , 8 /*int portNum */, true /*boolean ret*/ );       
+                 ST.push(32);  WORD();  // на стеке 0    
+                 ST.pop();  // сброс стека
+		      
+                 String  imm_test  = StrBuffer;
+                 if ( imm_test.equals("i") ) 
+		                       immediate();
+		 ST.push(2);  setCFA();      // cfa = 2     
+              }
+          else  enddo=true;	 
+    } while (! enddo) ;	      
  }
+
+
 
 
 public void exec () {
-  int addr=ST.pop();  // System.out.println("code "+memory[addr+1]); 
-  int ad = memory[addr]; 
-  if (ad == 1 || ad == 2 ) {    // если cfa 1 2
-    VM.adrStack.push(exit_addr-1);  // положить на стек возвратов адрес процедуры exit
-    VM.processImage(addr+1 );
+  int adrCfa=ST.pop();  
+
+  int cfa = mem.getInt(adrCfa);  // System.out.println("ad="+ad);
+  ST.push(adrCfa);
+  _body();
+  int body = ST.pop();
+  if (cfa == 1 || cfa == 2 ) {    // если cfa 1 2
+    VM.adrStack.push(exit_addr );  // положить на стек возвратов адрес процедуры exit
+    VM.processImage(body ); //+4 scip cfa 
     }
     else  
 
-      if (ad == 0) ST.push(addr+1);  //  если 0 положить adr pfa
+      if (cfa == 0) ST.push(body);  //+4  если 0 положить adr pfa
       
        else 
-         if (ad < 0 )  {  
+         if (cfa < 0 )  {    // слова - определенные через does>
 	//  System.out.println("cfa=" + ad);
-	   ST.push(addr+1);  //  положить adr pfa
-	    VM.adrStack.push(exit_addr-1);
-	   VM.processImage( -ad + 1) ; //addr+1 );
+	   ST.push(body);  //  положить adr pfa
+	   VM.adrStack.push(exit_addr/*-1*/);
+	  // int does_cfa = -cfa;
+	   VM.processImage( -cfa + 1) ; // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                                          // -cfa связано с does и с инстрциями вирт. машины call и ret
 	   } 
-
-
 }//void
 
-// добавить в init 
-/*
 
-      fas.STACK RST =  as. new STACK();     // создается стек возвратов
-      int[] ret_stackarray=new int[30];
-      RST.stack=ret_stackarray;//new int[100]; //stackarray;
-   //   as.STa=RST;
+/// вырезано часть 3
 
-      fas.FVM VM = as. new FVM();  // создается виртуальная машина
-      VM.stack=as.ST;
-      VM.adrStack=RST;
-      VM.image=as.memory;
-      int[] ports = new int[20]; 
-      VM.ports=ports; 
-      as.VM=VM;   
+//  компилируют byte int double и перемещают соответственно here
+ public void compile_byte(byte b) {
+      int tmp = mem.getInt(here);
+      mem.put(tmp, b) ;
+      tmp++;
+      mem.putInt(here,tmp); 
+ } 
 
-///
+ public void compile_int (int  i) {
+      int tmp = mem.getInt(here);
+      mem.putInt(tmp, i) ;
+      mem.putInt(here,tmp+4); 
+ } 
+
+ public void  compile_Double (double dbl) {
+      int tmp = mem.getInt(here);
+      mem.putDouble(tmp, dbl) ;
+      mem.putInt(here,tmp+8);  
+ }
+///////////////////////////////////////
 
 
-  as.initFVMwords();    // создаются словари для опкодов вирт. машины 
-
+ public void comp  () { // на стеке адр cfa
+   int adrCfa=ST.pop();
+   ST.push(adrCfa);
+   _body();
+   int body = ST.pop();  
+   
+   int cfa = mem.getInt(adrCfa); //  Содержимое cfa 
  
- as.cre1();  // создается  определение для exit
- 
- as.exit_addr=as.memory[as.here];//сохранить точску входа в exit,чтобы положить на стек возвратов  
- 
- as.ST.push(1); as.comma16();  // lit  
- as.ST.push(0); as.comma16();  // 0
- as.ST.push(1); as.comma16();  // lit  
- as.ST.push(0); as.comma16();  // 0 
- as.ST.push(29); as.comma16(); // out      -- вывод в порт 0, номер фции 0 "exit"
-
-  as.ST.push(2);  as.setCFA();
-
-
-// определяется "." 
- as.cre1();
-  as.ST.push(1); as.comma16();  // lit  
- as.ST.push(1); as.comma16();  // 1     
- as.ST.push(1); as.comma16();  // lit  
- as.ST.push(0); as.comma16();  // 0  // номер порта
- as.ST.push(29); as.comma16(); // out      -- вывод в порт 0, номер фции 1 "." 
-  as.ST.push(9); as.comma16();  //9  ";"
-
-  as.ST.push(2);  as.setCFA();
-
-*/
-
-/*   заменить code на 
-// start code
-             boolean bb = true;
- 	     as._IN = 0;
-	     as.TIB=s;
-	     
-             while (bb) {  // цикл разделения строк на слова
-	           as.ST.push(0);
-		   as.WORD();
-		   String ss = as.StrBuffer;
-              //     String ss =as.word_(s);
-                 //  as.ST.pop();
-                   
-		   if (! ss.equals("") ) {
-	         	    //  as.ST.push(0);
-
-                              as.FIND(); 
-		             int i =  as.ST.pop();// снять со стека признак немедленного исполнения
-		             if (i != 0) {
-		                    System.out.println(ss+" - найдено");
-			      //      as.ST.pop(); //сбросить признак immediate
-				    
-				    as.exec();
-				//          as.ST.pop(); //сбросить признак immediate
-			            }
-	 		           else { //  as.ST.pop();// System.out.println(ss+" - ненайдено");  //сбросить признак immediate 
-		                       // as.ST.push(0); 
-					as.number();			
-			                if (as.error != -1)  {System.out.println(ss+" add to stack"); } 
-	         		            else { as.error = 0; 
-		           	              //   as.cre0(ss);
-                                                 System.out.println(ss+ " add to vocabulary");  
-                                                }
-                      //             as.ST.pop(); //сбросить признак immediate
-                                }//end else
-                  }
-		  else { bb=false; as.ST.pop();}
-	      }//endwhile
-/// end code
-
-*/
-
- public void comp  () {
-   int addr=ST.pop();
-
-  if ( memory[addr] == 2 ) { // если cfa = 2
-              ST.push(7);      comma16();  // код команды call  
-	      ST.push(addr+1); comma16();
+   if (  cfa== 2 ) { // если cfa = 2    компиляция вызова процедуры
+              compile_byte(( byte) FVM.VM_CALL  ); // opcode call
+	      compile_int (body);// mem.putInt(tmp,addr+4);  	       
 	       }   
 	       else  
-	       if  (  memory[addr] == 1 ) {     
-                      memory [ memory[here] ] =memory[addr+1];/// !!!  _body
-                   //    System.out.println("here="+memory[here]+" addr="+addr+" val="+memory[addr+1]);
-                       memory[here]++; 
-		       }
+	       if  (  cfa == 1 ) {        //    компиляция опкода  виртуальной машины    
+		    byte code = mem.get(body);
+		    compile_byte(code);
+		       }   
 		       else 
-		       
 
-		       if  (  memory[addr] < 0 )  {
-		         ST.push(1);      comma16();  // код команды lit  
-		      	ST.push( addr+1 ); comma16();		       
+		       if  (   cfa < 0 )  {    // компиляция определения через does>
+		          compile_byte( (byte) FVM.VM_LIT ); // код команды lit  
+		      	  compile_int (body);  		       
 		       
-                          ST.push(7);      comma16();  // код команды call  
-	                  int i = -memory[addr]+1;///
-			  ST.push(i); comma16();		             
-			//   System.out.println(" compile " + i);
-			   
+                          compile_byte( (byte) FVM.VM_CALL ); //  код команды call  
+	                  //int i = -memory[addr]+1;///   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+			  compile_int (- cfa);   //ST.push(i); comma16();		             
+
 			    }
 			   else
-			    if  (  memory[addr] == 0 )  {
-			        ST.push(1);      comma16();  // код команды lit  
-	                        ST.push( addr+1 ); comma16();
+			    if  (   cfa== 0 )  {
+		                compile_byte( (byte) FVM.VM_LIT ); // код команды lit  
+		                 compile_int (body);  	
 			       }
- }
+  }
 
 
  public void literal() { 
-  if (memory[state]==1) {
-   ST.push( FVM.VM_LIT) ;   comma16(); // compile lit
-   comma16();                       // compile ","
+  if ( mem.getInt(state) ==1 ) {   
+    compile_byte( (byte) FVM.VM_LIT );  //ST.push( FVM.VM_LIT) ;   comma16(); // compile lit
+    compile_int ( ST.pop() )         ; //   comma16();                       // compile ","
    }
  }    
 
-public void proc() {
+ public void fliteral() { 
+  if ( mem.getInt(state) ==1 ) {   // 
+    compile_byte( (byte) FVM.VM_FLIT );   // compile flit
+    compile_Double ( ST.fpop() )      ;   
+   }
+ }   
 
+public void proc() {
    // добавить тестирование пустого слова ""
- //  System.out.println(" create " +str);
+//    System.out.println(" create ");// +str);
    cre1();
    ST.push(2) ; //   установить cfa = 2
    setCFA();
-   memory[state]=1; // перевод в режим компиляции
+   mem.putInt(state,1);  // перевод в режим компиляции
 } 
 
 
 public void ret()  { 
-  ST.push( VM.VM_RETURN ); //вкомпилировать return
-  comma16();  
-  memory[state]=0 ;
+  compile_byte( (byte) FVM.VM_RETURN );  // ST.push( VM.VM_RETURN ); //вкомпилировать return
+  mem.putInt(state,0); 
 }
 
 public void here() {
-  ST.push( memory[here] );
+  ST.push( mem.getInt(here) ) ; 
 }
 
+// -----
+
 public void does_() {
-// ST.push( VM.VM_RETURN );  // вкомпилируем ";" 
-// comma16();  
- int i = VM.adrStack.pop(); // peek();  // сохранить  со стека возвратов значение, которое занесло туда вызов does 
- ST.push ( -i + 1 ); 
- setCFA();  // устанавливает отрицательный адрес cfa   
+ int i = VM.adrStack.pop();  // сохранить  со стека возвратов значение, которое занесло туда вызов does 
+ ST.push ( -i + 1 );                                                                   //!!!!!!!!!!!!!!!!!!!1 проверить +1
+ setCFA();  //   устанавливает отрицательный адрес места после вызова does в cfa   
  VM._HALT=true;   // остановить VM
 
-VM.adrStack.pop(); //?????????????????????????????????  очистить стек возвратов
+VM.adrStack.pop(); //?????????????????????????????????  очистить стек возвратов . возможно чистит exit
 }
 
 
 public void compile() { 
-   int i = VM.adrStack.pop(); //peek();  // сохранить  со стека возвратов значение, которое занесло туда вызовc ompile()
-System.out.println("compile " +memory[ i+1] );
-   ST.push( memory[ i+1] );
-   comma16();
+   int i = VM.adrStack.pop(); // сохранить  со стека возвратов значение, которое занесло туда вызовc ompile()
+   byte code = mem.get(i);  //  
+   compile_byte(code);     // 
 VM.adrStack.push(i+1);  // обойти следущую после compile инструкцию 
 }
+
+public void compile_call() {   // компилирует вызовы процедуры  call adr
+   int i = VM.adrStack.pop(); // сохранить  со стека возвратов значение, которое занесло туда вызовc ompile()
+   byte code = mem.get(i);  //  
+   compile_byte(code);
+   int adr =  mem.getInt(i+1);     
+   compile_int(adr);        // 
+
+VM.adrStack.push(i+5);  // обойти следущую после compile инструкцию 
+}
+
 
 public void resolve_() {
    int i = ST.pop();  // 
    here(); 
  //  int m = ST.pop();
-   memory[i] = (short)ST.pop();
+   mem.putInt( i, ST.pop()  );   // memory[i] = (short)ST.pop();
 //   ST.push(i);
 //   comma16();
 }
 public void _resolve() {
-  comma16();
+  comma() ; // comma16();
 } 
 
 
 public void allot() {
-  memory[here]+=ST.pop(); 
+  //memory[here]+=ST.pop(); 
+  int i = mem.getInt(here) + ST.pop();
+  mem.putInt(here,i); 
 } 
 
 public void comment() {
   boolean log = true;
   while (log) {
-    ST.push(666); // разделитель для word  
+    ST.push(32); // разделитель для word  
     WORD(); 
    ST.pop();  // сброс word     
     if ( StrBuffer.compareTo( ")" )==0  ) log = false; 
@@ -957,109 +1110,26 @@ public void comment() {
 }
 
 public void comma() {
-    int adr = memory[here] ; 
-    int y= ST.pop(); // на два 16 битных с помощью сдвигов 
-    short a=(short)y ,  b = (short) (y >> 16);
-    memory[adr] =b ;   memory[adr+1]=a;
-     ST.push(2); allot(); 
-
+  compile_int(ST.pop() );
 }
 
 
-public  void ascii() {  ST.push(32); WORD();
-                        ST.pop(); 
-			ST.push( (int)StrBuffer.charAt(0) ) ;
-}
-
- public void qstring() {  // s"  на верш длинна 
-   int N = TIB.indexOf('\"' ,  _IN);
-   String s = TIB.substring(_IN,N);
-   ST.push( appendData(StringVector, s )  ); //appendData возвращает индекс на строку
-   ST.push( s.length() );
-   _IN = N+1;    
+ public void setState() {
+    mem.putInt(state,ST.pop() );
  }
-
- public void stype() {  // type
-   ST.pop(); //сбросить длинну
-   int ind = ST.pop(); 
-   System.out.println( getStringv(StringVector, ind) );
+ public void getState() {
+  ST.push(   mem.getInt(state)  );
  }
-
- public void qtype() { // ."
-   int N = TIB.indexOf('\"' ,  _IN);
-   String s = TIB.substring(_IN,N);
-
-   if (  memory[state]==0 ) { // режим исполнения
-      System.out.println(s);
-      _IN = N+1;  
-      }
-      else {  
-        ST.push( appendData(StringVector, s )  ); //appendData возвращает индекс на строку
-        literal();
-        ST.push( s.length() );
-        literal();
-	stype(); //??????/
-       _IN = N+1; 
-       }
- } 
-
- public void sconcat() {  //s+  s0 l0 s1 l1 -- sn ln  - соединение строк
-   int l0 = ST.pop();  int s0 = ST.pop();
-   int l1 = ST.pop();  int s1 = ST.pop(); 
-   String str0 = getStringv(StringVector, s0);
-   String str1 = getStringv(StringVector, s1);
-   String str=str1+str0;  
-   ST.push( appendData(StringVector, str )  ); //appendData возвращает индекс на строку
-   ST.push( str.length() );
- }
-
-/*
- // start code
-             boolean bb = true;
- 	     as._IN = 0;
-	     as.TIB=s;
-	     
-             while (bb) {  // цикл разделения строк на слова
-	           as.ST.push(0);
-		   as.WORD();
-		   String ss = as.StrBuffer;
-              //     String ss =as.word_(s);
-                 //  as.ST.pop();
-                   
-		   if (! ss.equals("") ) {
-	         	    //  as.ST.push(0);
-
-                              as.FIND(); 
-		             int i =  as.ST.pop();// снять со стека признак немедленного исполнения
-		             if (i != 0) {
-		                    System.out.println(ss+" - найдено");
-				    if (as.memory[as.state]==0 || i==1 ) 
-				      as.exec();
-				      else as.comp();
-			            }
-	 		           else { 
-					as.number();			
-			                if (as.error != -1)  {System.out.println(ss+" add to stack");  as.literal() ; } 
-	         		            else { as.error = 0; 
-		           	              //   as.cre0(ss);
-                                                 System.out.println(ss+ " notfound");  
-                                                }
-                                }//end else
-                  }
-		  else { bb=false; as.ST.pop();}
-	      }//endwhile
-/// end code
-*/
+ 
 
  public void interpret() {
-
   boolean log = true;     
-
   while ( log ) { 
     String wrl; 
-    ST.push(666); // разделитель для word  
+    ST.push(32); // разделитель для word  
     WORD();    // на стеке 0
     wrl = StrBuffer;  //  
+//    System.out.println("слово " +  wrl );
     if (wrl=="") { 
                  log = false;  //  достигнут конец потока 
                  ST.pop();  // сбросить стек после word 
@@ -1067,23 +1137,51 @@ public  void ascii() {  ST.push(32); WORD();
               else { 
 	          FIND();                // на стеке n  и 
                   int n = ST.pop();     // снять со стека признак немедленного исполнения
+//    System.out.println("n= " +  n );
         	  if (n==0) {         //слово не найдено - проверить если число
 		           number(); //забирает со стека <адр строки> -  пока  0
+		//	   System.out.println("проверка число ");
 		           if (error != 0)  {   // если число - number оставляет 0
 			                   log = false;
-			  		   System.out.println("слово " +  wrl + " не найдено" );
+		 	  		   System.out.println("слово " +  wrl + " не найдено" );
 					   error = 0;
-					   } else literal() ; 
-					   //System.out.println("число " +  wrl + " на стеке" );
+					   } else {  // literal() ; 
+		//			       System.out.println("число " +  wrl + " на стеке" );
+					          if (numberFormat==1)  literal() ;
+						     else if (numberFormat==3) fliteral(); 
+					        }
  			      }
 		    else  
-                      if (memory[state]==0 || n==1 ) // если find вернул immediate или состояние исполнения
-			     exec();
+                      if ( mem.getInt(state)==0 || n==1 ) // если find вернул immediate или состояние исполнения
+			    { exec(); //  System.out.println("exec");
+			    }
 			      else 
-			      comp();
+			     { comp();
+			     // System.out.println("compiling");
+			     }
 	      }//elsefind
   }// while
  }//interpret
+ 
+ public String loadTextFile(String filename) {
+   String ret = null;
+   StringBuilder sb = new StringBuilder();
+   try { 
+            FileInputStream fis;
+            fis=new FileInputStream(filename);
+          //  System.out.println("Размер файла: " + 
+          //                      fis.available() + " байт(а)");
+            int i = -1;
+            while(( i = fis.read()) != -1){
+              sb.append((char)i );  //   System.out.print((char)i);
+               }
+            ret=new String(sb);
+	    fis.close();
+        } catch(IOException e){
+            System.out.println(e.getMessage());
+        }
+ return ret;
+ }
 
 } 
 //////////////////////////end all////////////////////////////////////
