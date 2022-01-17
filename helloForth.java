@@ -23,22 +23,24 @@ public String StrBuffer;  //  сюда возвращает значение wor
 
     public static void main(String[] args) {
 
-      String filename=null;
-      if ( args != null ||   args[0] != "" )  filename=args[0];// System.out.println("nj= Это="+filename);
-      
-      fas  as = new fas();
-
+     fas  as = new fas();
+     String filename=null;
+      String firstfile=null;
+      if ( args != null  &&   args.length > 0  )  {// System.out.println("nj= Это="+args.length );
+         filename=args[0]; 
+         firstfile=as.loadTextFile(filename); //загрузка файла, если есть   
+       }
 
       fas.STACK ST =  as. new STACK();
       int[] stackarray=new int[100];
       ST.stack=stackarray;//new int[100]; //stackarray;
       as.ST=ST;
 
-     String firstfile=as.loadTextFile(filename); //загрузка файла, если есть 
+
 
 //init
   as.mem = as.createMemory(null,100000);
-  if (as.mem==null) System.out.println("memo  huynia polnaya"); else System.out.println("memoyes");
+  if (as.mem==null) System.out.println("memo  error"); else System.out.println("memoyes");
    
       as.here    = 2; //  адреса в памяти, где хранятся эти  переменные
       as.latest  =6;
@@ -140,6 +142,7 @@ public String StrBuffer;  //  сюда возвращает значение wor
  	     as._IN = 0;
 	     as.TIB=s;
   as.interpret();
+
  
            }      
       else b = false;
@@ -149,6 +152,16 @@ public String StrBuffer;  //  сюда возвращает значение wor
    while (as.ST.getDepth() != 0 ) System.out.println(as.ST.pop()+"\n" );  //////////стек
 //   for (int k=0;k<V.size();k++) System.out.println(V.elementAt(k).toString() ) ; /// вектор строк
 
+/*
+ as.VM.testget(as);
+ 
+//  as.VM.testget(  Math);
+// as.VM.testget(  (Object)System);
+  
+   String s1 = as.VM.testgets(as,"ref")  ;
+  System.out.println(s1);
+
+*/
    } //main
 
 }///	 
