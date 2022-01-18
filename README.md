@@ -61,6 +61,7 @@ s=  сравнение строк
 constant   variable   c,  2const
 >name
 voc-link - список словарей
+  
 адреса переменных в памяти виртуальной машины форта.
  2  constant here_
  6  constant latest
