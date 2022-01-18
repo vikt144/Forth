@@ -1,0 +1,46 @@
+: c,  here  c! 1 allot  ;
+
+: 2const create , , does> 2@ ;
+
+: >name  9 -  ; ( смещает cfa to nfa )
+
+: ."  34 word  0 ( на стеке 0 0, здесь это значит, строка в буфере, длинна строки определяется автоматически ) 
+       state@ 0 =
+       if  type   ( если режим исполнения - печатать )
+        else  
+          spick   ( продублировать буфер )
+          swap
+          literal literal 
+          compile_call
+	  type    
+      then 
+ ; immediate  
+
+ : constant create , does> @ ;  
+ : variable create 4 allot   ;
+      
+ 2  constant here_
+ 6  constant latest
+ 10 constant state
+ 15 constant context
+ 20 constant current
+ 25 constant forthVoc
+ 
+  var voc-link    0 voc-link ! 
+  
+  : vocabulary  ( name ) 
+    create  
+    0 ,   
+    here
+        voc-link  dup     
+        @ ,
+    !
+   does>
+   context  !
+  ;
+ 
+  : DEFINITIONS ( ---> )  CONTEXT  @  CURRENT  !  ;
+  
+  : forth  forthVoc @  context ! ; 
+
+
