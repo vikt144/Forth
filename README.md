@@ -5,6 +5,7 @@ Building forth for scripts in program
 операции с плавающей точкой и другие новшества.
 
 Список слов
+
 NOP LIT dup drop swap    >R R>    CALL  branch   ;
     0> 0< 0= ?branch
     @ !
@@ -14,7 +15,8 @@ NOP LIT dup drop swap    >R R>    CALL  branch   ;
     IN OUT WAIT   LIT8  c@ c! 
   EXIT .
 
- :   ;   create   allot  does>  ,   here
+ :       
+ ;   create   allot  does>  ,   here
 compile   compile_call   immediate   >resolve   <resolve  >mark  <mark
 name>    L>NAME      link>    >body   state@ 
 word  find
